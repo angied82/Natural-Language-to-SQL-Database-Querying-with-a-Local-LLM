@@ -1,0 +1,533 @@
+Lakshmi K. --> 
+
+  Input: "In a Python script running on a Linux server (ILab), how do I connect to a PostgreSQL database using psycopg2, prompt for credentials using getpass, execute a SELECT query provided as part of the command line argument, and format the output results for display?"
+  Output: "Here’s a clean way to do exactly what you’re describing on a Linux server (like iLab): connect to PostgreSQL with psycopg2, securely prompt for credentials using getpass, take a SQL SELECT query from the command line, execute it, and print formatted results.
+
+import psycopg2
+import sys
+from getpass import getpass
+
+def main():
+    if len(sys.argv) < 2:
+        print("Usage: python script.py \"SELECT * FROM table;\"")
+        sys.exit(1)
+
+    query = sys.argv[1]
+
+    # Secure credential input
+    db_name = input("Database name: ")
+    user = input("Username: ")
+    password = getpass("Password: ")
+
+    try:
+        conn = psycopg2.connect(
+            dbname=db_name,
+            user=user,
+            password=password,
+        )
+
+        cur = conn.cursor()
+        cur.execute(query)
+        conn.commit()
+        cur.close()
+        conn.close()
+
+    except psycopg2.Error as e:
+        print("Database error:", e)
+
+if __name__ == "__main__":
+    main()
+
+Why getpass is used: 
+from getpass import getpass
+password = getpass("Password: ")
+This hides the password input in the terminal so it doesn’t show up in plaintext.
+
+If you want, I can also show you a 
+more “iLab assignment-friendly” version using argparse, logging, and better table formatting (like tabulate)."
+
+  Input: "How do you install pip across ILab when it blocks global install?"
+  Output: "On iLab (and most university Linux servers), you usually don’t have sudo/root access, so pip install into the system Python is blocked. The correct solution is to install packages locally in your home directory or inside a virtual environment.
+
+Here are the standard approaches (use these in order of preference):
+
+Option 1: Use a virtual environment (BEST / recommended)
+
+This is what professors usually expect.
+1. Create a virtual environment
+python3 -m venv myenv
+2. Activate it
+source myenv/bin/activate
+
+Your terminal should now show:
+1. Create a virtual environment
+python3 -m venv myenv
+2. Activate it
+source myenv/bin/activate
+Your terminal should now show:
+(myenv) user@ilab:~
+3. Install packages normally
+pip install psycopg2-binary
+4. Run your script
+python script.py "SELECT * FROM table;"
+5. Exit when done
+deactivate
+
+Option 2: Install with --user (no virtual environment)
+If venv is annoying or not allowed:
+pip install --user psycopg2-binary
+This installs into:
+~/.local/lib/pythonX.X/site-packages
+Make sure Python sees it (usually automatic on iLab, but if not):
+export PYTHONPATH=$HOME/.local/lib/python3.X/site-packages:$PYTHONPATH
+
+If you tell me what error you’re getting (like “externally managed environment” or permission denied), I can pinpoint exactly which fix applies to your iLab setup."
+
+
+--------------------------------------------------------------------------------------------------
+Shreya Bhatlapenumarti ---> 
+
+Input:
+"How can I build a Python program that takes a natural language question and converts it into a SQL SELECT query using a given database schema?"
+
+Output:
+A simple structure is to read the schema from a separate file, take the user’s natural language question as input, and build a prompt that includes both the schema and the question. The prompt should clearly tell the model to return only one PostgreSQL SELECT query and not include explanations or markdown.
+
+For testing, the program can include a function that maps common user questions to SQL queries. Later, that function can be replaced with a real local LLM call. The basic flow is:
+
+1. Read schema_prompt.sql
+2. Ask the user for a question
+3. Generate or return a SQL SELECT query
+4. Print the SQL output
+5. Repeat until the user types "exit"
+----
+Input: "How should I structure a Python function that takes a user question and returns a SQL query using simple logic before integrating a real LLM?"
+
+Output: "You can create a helper function (e.g., run_llm) that takes the user question as input and uses conditional logic (if/elif statements) to return predefined SQL queries for common cases. This allows you to test the overall pipeline before connecting a real LLM.
+
+For example, check if the question contains keywords like "average income" or "loan value greater than", and return the corresponding SQL query. If no condition matches, return a default query like SELECT * FROM application LIMIT 5.
+
+This approach helps verify that your program correctly takes input, processes it, and outputs valid SQL before adding model-based generation." 
+----
+Input: "How can I write a simple Python function that takes a user question and returns a SQL query using conditional logic for testing?"
+Output: "You can define a function that takes a string input and uses if/elif statements to match keywords in the question. Based on the match, return a corresponding SQL query.
+
+Example:
+
+def run_llm(question):
+    q = question.lower()
+
+    if "average income" in q:
+        return "SELECT AVG(applicant_income_000s) FROM application;"
+    elif "loan value greater than" in q:
+        return "SELECT COUNT(*) FROM application WHERE loan_amount_000s > applicant_income_000s;"
+    else:
+        return "SELECT * FROM application LIMIT 5;"
+
+This allows you to simulate LLM behavior while testing your pipeline."
+---
+Input: "How can I update my Python function so it uses a local llama-cpp model with schema_prompt.sql, but still falls back to simple SQL responses if the model fails?"
+
+Output: "You can keep the fallback function for testing, then update run_llm() to try loading a local model with llama_cpp. The function should read schema_prompt.sql, build a prompt with the schema and user question, call the local model, and return the SQL text. If the model file is missing or the output does not start with SELECT, return the fallback query.
+Example structure:
+
+from llama_cpp import Llama
+
+def run_llm(question):
+    try:
+        f = open('schema_prompt.sql', 'r')
+        schema = f.read()
+        f.close()
+
+        llm = Llama(model_path='model.gguf', n_ctx=2048, verbose=False)
+
+        prompt = f'Write a SQL SELECT query.\\nSchema:\\n{schema}\\nQuestion: {question}\\nSQL:'
+
+        result = llm(prompt, max_tokens=200)
+        sql = result['choices'][0]['text'].strip()
+
+        if sql.lower().startswith('select'):
+            return sql
+
+        return keyword_fallback(question)
+
+    except Exception as e:
+        print('LLM error:', e)
+        return keyword_fallback(question)
+
+This keeps the same function output as before, so the rest of the project can still process the SQL string."
+--------------------------------------------------------------------------------------
+Angela Ding -->
+
+Input: "When creating file that contain the subset of a large SQL script that has all the CREATE TABLES how do I know which INSERT statement to choose in order to insure that all the right data are there"
+
+Output: "To know exactly which INSERT statements to choose, you have to satisfy the database's Referential Integrity—specifically, its Foreign Key Constraints. If Table B relies on Table A, you cannot insert a row into Table B unless the exact matching row in Table A is also included in your file.To ensure all the "right" data is there, you have to follow the Dependency Tree of your database. There are two main ways to figure out which rows to pick:
+
+Method 1: The "Bottom-Up" Approach (Best for testing): Instead of starting with the setup tables, you start with the most important "transaction" or "event" table in your database and work backward to find its parents.Pick your core data: Let's say your main table is Orders. You select 10 random INSERT statements for the Orders table. Identify the parents: Look at those 10 Orders rows. What customer_ids do they use? What product_ids do they use?
+Fetch the required parents: Go to your Customers table and pick only the INSERT statements for the specific customer_ids you found in step 2. Go to the Products table and do the same. Repeat: If the Products table has a category_id, look at the categories used by your selected products, and go fetch those specific rows from the Categories table. This guarantees that every single foreign key is satisfied and you have a perfect, unbroken slice of reality.
+
+Method 2: The "Top-Down" Approach: If you want to build the data from the ground up, you go in the exact opposite direction. Insert all independent Lookup Tables first: Find tables that have NO foreign keys (e.g., States, Statuses, Categories). You usually keep 100% of the inserts for these because they are small and don't depend on anything. Pick random Parents: Go to your Users or Customers table. Pick 10 random inserts. Note their IDs. Filter the Children: Go to the Orders table. Look for inserts where the customer_id matches one of the 10 you picked in step 2. Delete all other inserts."
+----
+
+Input: "“What steps should I follow to extract a SQL query from a text response?”
+Ouput: "When you extract a SQL query from an LLM response, you are essentially building a "funnel." You start with a big, messy block of text and pass it through a series of filters until only the pure, safe SQL remains at the bottom.
+
+Step 1: Target the Markdown (The "Happy Path")
+Most modern LLMs format their code inside Markdown blocks. Your first step should always be to use Regular Expressions (Regex) to search for these blocks.
+Action: Search for text sandwiched between ```sql and ``` (or just ``` and ```).
+Why: This instantly drops 90% of the conversational text like "Here is your query:" or "Hope this helps!"
+Code Concept: `re.search(r'
+
+### Step 2: Establish a Fallback (The "Lazy LLM" Path)
+Sometimes, if you prompt an LLM very strictly (e.g., "Output ONLY valid SQL"), it will actually listen to you and skip the Markdown blocks entirely. If your Step 1 regex fails, you need a backup plan.
+* **Action:** If no markdown block is found, treat the *entire* raw text response as your starting string.
+* **Why:** If you don't have a fallback, your code will crash every time the LLM formats its answer as plain text.
+
+### Step 3: Strip Stray Artifacts
+Whether you got your string from Step 1 or Step 2, it probably still has invisible junk attached to it.
+* **Action:** Remove leading and trailing whitespaces, newlines, stray backticks (`), and stray quotation marks.
+* **Why:** A query that looks like `  SELECT * FROM users;  ` or `` `SELECT * FROM users;` `` will often cause syntax errors depending on the database driver you are using.
+* **Code Concept:** `raw_sql.strip().strip('`').strip('"')`
+
+### Step 4: Handle Comments and Semicolons
+LLMs love to add explanations *inside* the SQL query using comments. Sometimes they also add multiple statements separated by semicolons.
+* **Action:** (Optional but recommended) Remove inline comments (lines starting with `--`). If your database driver only accepts one statement at a time, split the string by `;` and keep only the first valid part.
+* **Why:** Drivers like Python's `sqlite3` or `psycopg2` sometimes throw errors if you pass them multiple statements at once or if trailing comments mess up the execution formatting.
+
+### Step 5: Validate the Command (The Security Check)
+Before you ever send the extracted string to your database, you must verify that it actually looks like SQL and is safe to run.
+* **Action:** Check the very first word of your cleaned string. Ensure it is in an approved list (e.g., `SELECT`, `WITH`). If you are only doing data retrieval, explicitly reject the string if it starts with `DROP`, `DELETE`, `UPDATE`, or `INSERT`.
+* **Why:** This prevents your app from accidentally trying to execute the sentence "Sorry, I don't know the answer" as a database command, and it protects your database from accidental deletion if the LLM hallucinates a `DROP TABLE` command.
+* **Code Concept:** `if not clean_sql.upper().startswith(('SELECT', 'WITH')): raise Error()`
+
+### Summary Pipeline
+`Raw Text` ➔ `Regex Extraction` ➔ `Fallback Check` ➔ `Whitespace Strip` ➔ `Comment Cleanup` ➔ `Keyword Validation` ➔ **`Clean SQL`**
+______
+
+Lucas B -->
+
+--------------------------------------------------------------------------------------------------
+
+Input: "Can you explain the full pipeline for a Python program where the user enters a natural language question, a local LLM converts it to a SQL SELECT query, the program extracts the SQL query, then sends that query over SSH to an iLab server where another Python script runs it on PostgreSQL and returns the table output?"
+
+Output: "The full pipeline is:
+
+User question
+-> Local LLM
+-> SQL extraction/cleanup
+-> Safety check
+-> SSH command to iLab
+-> iLab Python script
+-> PostgreSQL database
+-> Results printed back to user
+
+Step 1: User enters a natural-language question.
+The local controller program asks the user for a question, such as:
+What is the average applicant income?
+
+Step 2: The local LLM generates a SQL query.
+The program sends the question to the LLM function. The LLM should return a PostgreSQL SELECT query, such as:
+SELECT AVG(applicant_income_000s) FROM application;
+
+Step 3: The program extracts the SQL query.
+Because the LLM might include extra explanation or markdown formatting, the extraction function pulls out only the SQL query and removes unnecessary formatting.
+
+Step 4: The program validates the query.
+Before sending anything to the server, the program checks that the query is safe. For this project, it should only allow SELECT queries and reject commands like DROP, DELETE, UPDATE, INSERT, ALTER, or CREATE.
+
+Step 5: The local program sends the query to iLab through SSH.
+The local computer does not directly connect to PostgreSQL. Instead, it SSHs into the iLab server and runs a command like:
+python3 ilab_script.py "SELECT * FROM application LIMIT 5;"
+
+Step 6: The iLab script receives the SQL query.
+The remote script reads the query from the command-line argument using sys.argv[1].
+
+Step 7: The iLab script connects to PostgreSQL.
+The script asks for the user's Rutgers NetID and password using input and getpass, then connects to postgres.cs.rutgers.edu using psycopg2.
+
+Step 8: The iLab script executes the query.
+The script runs cur.execute(query), fetches the rows, gets the column names, and converts the output into a pandas DataFrame.
+
+Step 9: The iLab script prints the result.
+The table output is printed on the remote server.
+
+Step 10: The output travels back through SSH.
+Because the local program started the remote command, anything printed by the remote script appears back in the local program's terminal.
+
+The main idea is that the local program is the controller. It gets the question, calls the LLM, cleans the SQL, validates it, sends it to iLab, and shows the returned result."
+
+--------------------------------------------------------------------------------------------------
+
+Input: "How can I use Python Paramiko to SSH into a remote Linux server, securely ask the user for their username and password with getpass, run a remote Python script with a SQL query as a command-line argument, and capture the output back into my local Python program?"
+
+Output: "Use Paramiko for the SSH part of the local controller program. The basic structure is:
+
+local Python program
+-> ask for SSH username/password securely
+-> build a safe remote command
+-> SSH into iLab
+-> run python3 ilab_script.py with the SQL query
+-> capture stdout and stderr
+-> print the result locally
+
+A basic version is:
+
+import paramiko
+import getpass
+import shlex
+
+
+def run_remote_sql_query(sql_query: str) -> tuple[int, str, str]:
+    hostname = "ilab.cs.rutgers.edu"
+    username = input("Enter your iLab/Rutgers NetID: ")
+    password = getpass.getpass("Enter your iLab/Rutgers password: ")
+
+    remote_script_path = "~/ilab_script.py"
+    remote_command = f"python3 {remote_script_path} {shlex.quote(sql_query)}"
+
+    client = paramiko.SSHClient()
+    client.load_system_host_keys()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+
+    try:
+        client.connect(
+            hostname=hostname,
+            username=username,
+            password=password,
+            look_for_keys=False,
+            allow_agent=False,
+            timeout=15
+        )
+
+        stdin, stdout, stderr = client.exec_command(remote_command)
+
+        output = stdout.read().decode("utf-8", errors="replace")
+        error_output = stderr.read().decode("utf-8", errors="replace")
+        exit_code = stdout.channel.recv_exit_status()
+
+        return exit_code, output, error_output
+
+    finally:
+        client.close()
+
+
+if __name__ == "__main__":
+    sql = "SELECT * FROM application LIMIT 5;"
+    exit_code, output, error_output = run_remote_sql_query(sql)
+
+    print("--- Remote Output ---")
+    print(output)
+
+    if exit_code != 0:
+        print("--- Remote Error ---")
+        print(error_output)
+
+    print("Exit code:", exit_code)
+
+In the full project, the SQL query should not be hardcoded. Instead, it should come from the LLM and extraction pipeline:
+
+question = input("Enter a database question: ")
+llm_response = run_llm(question)
+clean_sql = extract_query(llm_response)
+
+if not clean_sql.strip().upper().startswith("SELECT"):
+    print("Only SELECT queries are allowed.")
+else:
+    exit_code, output, error_output = run_remote_sql_query(clean_sql)
+    print(output)
+
+One important note is that there may be two passwords involved: the SSH password for iLab and the PostgreSQL password for the database. If the remote script asks for credentials interactively, Paramiko may need get_pty=True, but the cleaner class-project design is usually to ask for credentials in a predictable way and keep the remote script focused on receiving and running the SQL query."
+
+--------------------------------------------------------------------------------------------------
+
+Input: "So, if I need to pass a SQL SELECT query as an argument to a remote Python script over SSH, how should I safely quote or escape the query so spaces, semicolons, and quotation marks do not break the shell command?"
+
+Output: "Use Python's shlex.quote() on the SQL query before inserting it into the remote shell command.
+
+The recommended pattern is:
+
+import shlex
+
+sql_query = "SELECT * FROM application WHERE applicant_income_000s > 100 LIMIT 5;"
+remote_script_path = "~/ilab_script.py"
+remote_command = f"python3 {remote_script_path} {shlex.quote(sql_query)}"
+
+This safely turns the SQL query into one shell-safe argument. Even if the SQL query contains spaces, semicolons, single quotes, or double quotes, the remote shell will still pass it as one argument to the Python script.
+
+Without quoting, this command can break:
+
+python3 ilab_script.py SELECT * FROM application WHERE name = 'John Smith';
+
+The shell would treat SELECT, *, FROM, application, WHERE, and the rest as separate arguments. But the remote script expects the whole query to be sys.argv[1].
+
+With shlex.quote(), the command becomes shell-safe, even if it looks ugly. That is okay because the shell interprets it correctly.
+
+A useful helper function is:
+
+import shlex
+
+
+def build_remote_sql_command(sql_query: str, remote_script_path: str) -> str:
+    quoted_query = shlex.quote(sql_query)
+    return f"python3 {remote_script_path} {quoted_query}"
+
+If the script path might contain spaces, quote the script path too:
+
+remote_command = f"python3 {shlex.quote(remote_script_path)} {shlex.quote(sql_query)}"
+
+For the project, the key line is:
+
+command = f"python3 {remote_script_path} {shlex.quote(sql_query)}"
+
+That is what protects the SQL query from breaking the SSH command."
+
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+  Input: "I currently have a local Python program with a loop that asks the user for a question, generates or receives an LLM response, extracts a cleaned SQL SELECT query, and then uses subprocess.run to call a local script. How should I modify the program so that instead of subprocess.run locally, it uses Paramiko to execute ilab_script.py on a remote iLab server?"
+
+  Output: "Replace the local subprocess call with a Paramiko helper function that SSHes into iLab and runs the script remotely.
+
+The original local call looks like:
+
+subprocess.run(["python3", "ilab_script.py", processed_sql])
+
+That should be replaced with a function that opens an SSH connection, safely quotes the SQL query, runs the remote script, captures stdout/stderr, and returns the output to the local program.
+
+The main imports needed are:
+
+import paramiko
+import getpass
+import shlex
+
+A helper function can be structured like this:
+
+def run_query_on_ilab(sql_query: str, hostname: str, username: str, password: str):
+    remote_script_path = "~/ilab_script.py"
+    command = f"python3 {remote_script_path} {shlex.quote(sql_query)}"
+
+    client = paramiko.SSHClient()
+    client.load_system_host_keys()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+
+    try:
+        client.connect(
+            hostname=hostname,
+            username=username,
+            password=password,
+            look_for_keys=False,
+            allow_agent=False
+        )
+
+        stdin, stdout, stderr = client.exec_command(command)
+
+        output = stdout.read().decode("utf-8", errors="replace")
+        error_output = stderr.read().decode("utf-8", errors="replace")
+        exit_code = stdout.channel.recv_exit_status()
+
+        return exit_code, output, error_output
+
+    finally:
+        client.close()
+
+Inside the main loop, instead of subprocess.run, the program should call:
+
+exit_code, output, error_output = run_query_on_ilab(
+    sql_query=processed_sql,
+    hostname=hostname,
+    username=ssh_username,
+    password=ssh_password
+)
+
+Then it should print the remote output:
+
+print("\n-- Query Result --")
+print(output)
+
+if error_output.strip():
+    print("\n-- Remote Error --")
+    print(error_output)
+
+The main idea is that the local controller still handles the question, LLM response, SQL extraction, and validation. The only major change is that the final execution step now happens through SSH on the remote iLab server instead of running ilab_script.py locally."
+
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+  Input: "How should I structure a Python interactive command-line program so that it asks for SSH credentials once, then repeatedly asks for natural language questions, sends each generated SQL query to the remote server, prints the output table, and exits only when the user types exactly \"exit\"?"
+
+  Output: "The program should have one setup section before the loop, then a repeated question-processing loop.
+
+The basic structure is:
+
+Ask for SSH credentials once
+Connect to iLab once
+Loop:
+    ask user question
+    if question == "exit": stop
+    generate SQL from the natural language question
+    extract the clean SQL query
+    validate that it is a safe SELECT query
+    send the query to iLab through Paramiko
+    print the remote table output
+Close the SSH connection when done
+
+The SSH connection should be created before the loop:
+
+client = paramiko.SSHClient()
+client.load_system_host_keys()
+client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+
+client.connect(
+    hostname=hostname,
+    username=ssh_username,
+    password=ssh_password,
+    look_for_keys=False,
+    allow_agent=False
+)
+
+Then inside the loop, each question gets processed:
+
+while True:
+    user_question = input("\nEnter question: ")
+
+    if user_question == "exit":
+        print("Exiting...")
+        break
+
+    raw_llm_output = run_llm(user_question)
+    processed_sql = extract_query(raw_llm_output)
+
+    if processed_sql.startswith("ERROR"):
+        print(processed_sql)
+        continue
+
+    if not is_safe_select_query(processed_sql):
+        print("Rejected query. Only safe SELECT queries are allowed.")
+        continue
+
+    exit_code, output, error_output = run_query_on_ilab(
+        client=client,
+        sql_query=processed_sql,
+        remote_script_path=remote_script_path
+    )
+
+    print("\n-- Query Result --")
+    print(output)
+
+    if error_output.strip():
+        print("\n-- Remote Error --")
+        print(error_output)
+
+The key detail is that the exit condition should be exactly:
+
+if user_question == "exit":
+    break
+
+This means the program only exits when the user types exactly exit. Inputs like Exit, EXIT, exit with spaces, or other variations would not quit unless the condition is changed to use strip() or lower().
+
+The SSH client should be closed in a finally block:
+
+finally:
+    client.close()
+    print("SSH connection closed.")
+
+This design keeps the login step from repeating every time, while still allowing the user to ask multiple database questions in one session."
+
